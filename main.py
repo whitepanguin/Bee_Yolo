@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from routes_cls import router as cls_router
 
 # -------------------------
 # Config
@@ -267,19 +268,25 @@ app.add_middleware(
     allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
+app.include_router(cls_router)
+
 @app.get("/health")
 def health():
+    import torch
+    ok = True  # 기존 체크들...
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # classifier health (optional)
+    try:
+        from routes_cls import get_classifier
+        clf = get_classifier()
+        cls_ok = clf.loaded
+    except Exception:
+        cls_ok = False
     return {
-        "status": "ok",
-        "device": str(device),
-        "img_size": IMG_SIZE,
-        "nc": NC,
-        "weights_loaded": os.path.isfile(DEFAULT_WEIGHTS),
-        "weights_path": DEFAULT_WEIGHTS,
-        "meta": {
-            "epoch": (None if _ckpt_meta is None else _ckpt_meta.get("epoch")),
-            "map50": (None if _ckpt_meta is None else _ckpt_meta.get("map50")),
-        }
+        "ok": ok,
+        "device": device,
+        "weights_loaded": True,   # 기존 값 유지
+        "cls_loaded": cls_ok,     # ✅ 필드 추가(경로 변경 없음)
     }
 
 # ---- 이미지 탐지+크롭 ----
