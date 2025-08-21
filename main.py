@@ -22,6 +22,8 @@ from routes_cls import router as cls_router
 IMG_SIZE = int(os.getenv("IMG_SIZE", "416"))
 NC = int(os.getenv("NC", "1"))  # bee=1
 DEFAULT_WEIGHTS = os.getenv("WEIGHTS_PATH", "yolov3_best(50E).pt")  # ← 파일명 그대로 사용
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WEIGHTS_PATH = os.path.join(BASE_DIR, "models", "yolov3_best(50E).pt")
 CONF_THR_DEFAULT = float(os.getenv("CONF_THR", "0.50"))
 IOU_THR_DEFAULT  = float(os.getenv("IOU_THR",  "0.45"))
 BOX_MARGIN_RATIO_DEFAULT = float(os.getenv("BOX_MARGIN", "0.08"))  # 크롭 여백
