@@ -15,16 +15,69 @@ from fastapi import FastAPI, UploadFile, File, Form, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from routes_cls import router as cls_router
+# -------------------------
+# Config (robust weights resolver)
+# -------------------------
+import os
+from pathlib import Path
 
-# -------------------------
-# Config
-# -------------------------
 IMG_SIZE = int(os.getenv("IMG_SIZE", "416"))
 NC = int(os.getenv("NC", "1"))  # bee=1
-DEFAULT_WEIGHTS = os.getenv("WEIGHTS_PATH", "yolov3_best(50E).pt")  # ← 파일명 그대로 사용
+
+DEFAULT_WEIGHTS_NAME = "yolov3_best(50E).pt"   # 파일명 고정
+ENV_WEIGHTS = os.getenv("WEIGHTS_PATH", "")    # 주어지면 최우선
+
+BASE_DIR = Path(__file__).resolve().parent     # 이 파일이 있는 폴더
+CWD = Path.cwd()                               # 현재 작업 디렉터리
+
+def _candidate_paths(name_or_path: str):
+    p = Path(name_or_path)
+    if p.is_absolute():
+        # 절대경로면 그대로 시도
+        yield p
+        return
+    # 상대경로면 여러 후보를 순서대로 시도
+    # 1) 이 파일 옆 models/
+    yield BASE_DIR / "models" / name_or_path
+    # 2) 이 파일 옆
+    yield BASE_DIR / name_or_path
+    # 3) 현재 작업 디렉터리 models/
+    yield CWD / "models" / name_or_path
+    # 4) 현재 작업 디렉터리 바로 아래
+    yield CWD / name_or_path
+    # 5) 상위 디렉터리의 models/ (uvicorn을 상위에서 실행하는 경우 대비)
+    yield BASE_DIR.parent / "models" / name_or_path
+
+def resolve_weights_path() -> str:
+    tried = []
+    # 1) 환경변수 우선
+    if ENV_WEIGHTS:
+        for cand in _candidate_paths(ENV_WEIGHTS):
+            tried.append(str(cand))
+            if cand.is_file():
+                return str(cand)
+    # 2) 기본 파일명으로 탐색
+    for cand in _candidate_paths(DEFAULT_WEIGHTS_NAME):
+        tried.append(str(cand))
+        if cand.is_file():
+            return str(cand)
+    # 못 찾으면 에러
+    raise FileNotFoundError(
+        "Could not locate YOLOv3 weights.\n"
+        "Tried:\n  - " + "\n  - ".join(tried)
+    )
+
+try:
+    DEFAULT_WEIGHTS = resolve_weights_path()
+    print(f"[INFO] Using weights: {DEFAULT_WEIGHTS}")
+except FileNotFoundError as e:
+    # 로드 자체는 뒤에서 try/except로 한 번 더 처리되므로 경고만
+    print(f"[WARN] {e}")
+    DEFAULT_WEIGHTS = DEFAULT_WEIGHTS_NAME  # 마지막 안전망(나중에 로드 시도)
+
 CONF_THR_DEFAULT = float(os.getenv("CONF_THR", "0.50"))
 IOU_THR_DEFAULT  = float(os.getenv("IOU_THR",  "0.45"))
-BOX_MARGIN_RATIO_DEFAULT = float(os.getenv("BOX_MARGIN", "0.08"))  # 크롭 여백
+BOX_MARGIN_RATIO_DEFAULT = float(os.getenv("BOX_MARGIN", "0.08"))
 
 # -------------------------
 # YOLOv3 (필요 최소 구현)
